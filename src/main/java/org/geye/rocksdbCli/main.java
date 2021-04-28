@@ -1,3 +1,5 @@
+package org.geye.rocksdbCli;
+
 import org.apache.commons.cli.*;
 
 import java.sql.Timestamp;
@@ -41,6 +43,12 @@ public class main {
         int limit = Integer.parseInt(commandLine.getOptionValue("limit", "10"));
 
         RocksdbReader rocksdbReader = new RocksdbReader();
-        rocksdbReader.doSearch(startTs, endTs, "srcIp", "192.168.10.1", limit);
+
+        String expression = commandLine.getOptionValue("e");
+        String indexType = expression.split("=")[0];
+        String target = expression.split("=")[1];
+
+        rocksdbReader.doSearch(startTs, endTs, indexType, target, limit);
+
     }
 }
