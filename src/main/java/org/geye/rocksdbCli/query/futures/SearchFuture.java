@@ -22,25 +22,24 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
     private String indexType = new String(RocksDB.DEFAULT_COLUMN_FAMILY);
     private final QueryParams params;
 
-    public SearchFuture(String dbPath, String indexType, QueryParams params) {
+    public SearchFuture(String dbPath, String indexType, QueryParams params) throws RocksDBException {
         this.dbPath = dbPath;
         this.indexType = indexType;
         this.params = params;
     }
 
-    public SearchFuture(String dbPath, QueryParams params) {
-        this.dbPath = dbPath;
-        this.params = params;
-    }
-
     public List<DocNode> readSessionDb(List<byte[]> ids) {
         List<DocNode> sessions = new ArrayList<>();
-        long t1 = System.currentTimeMillis();
 
-        String sessionDbPath = this.dbPath.replace("index", "sessions");
         try {
-            RocksdbWithCF rocksdb = getDefaultDb(sessionDbPath);
-            List<byte[]> sessionList = rocksdb.db.multiGetAsList(ids);
+            String sessionDbPath = this.dbPath.replace("index", "sessions");
+
+            // TODO: 这一步最消耗时间，最好的办法是第一次把所有的库都加载到缓存里面
+            RocksdbWithCF sessionDb  = this.getDefaultDb(sessionDbPath);
+
+            long t1 = System.currentTimeMillis();
+
+            List<byte[]> sessionList = sessionDb.db.multiGetAsList(ids);
 
             for (int i=0; i<sessionList.size(); i++) {
 
@@ -54,15 +53,14 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
                 sessions.add(docNode);
             }
 
-            rocksdb.close();
+            long t2 = System.currentTimeMillis();
+
+            System.out.println("(" + this.dbPath + ")采用multiGet方式取值: " + (float) (t2 - t1) / 1000);
 
         } catch (RocksDBException e) {
             e.printStackTrace();
         }
 
-        long t2 = System.currentTimeMillis();
-
-        System.out.println(Thread.currentThread().getName() + ": " + (float) (t2 - t1) / 1000);
         return sessions;
     }
 
@@ -103,9 +101,10 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
                 }
             }
 
+            System.out.println(Thread.currentThread().getName() + ": data size: " + idList.size());
+
             if (idList.size() > 0) {
-                List<DocNode> docNodes = this.readSessionDb(idList);
-                this.data = docNodes;
+                this.data = this.readSessionDb(idList);
             }
 
             iterator.close();
@@ -154,4 +153,6 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
     public List<DocNode> get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
         return this.data;
     }
+
+    public String getDbPath() { return this.dbPath; }
 }

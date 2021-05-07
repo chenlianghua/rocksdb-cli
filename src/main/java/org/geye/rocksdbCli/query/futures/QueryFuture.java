@@ -6,7 +6,6 @@ import org.rocksdb.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
@@ -14,7 +13,7 @@ import java.util.concurrent.TimeoutException;
 
 public abstract class QueryFuture<V> implements RunnableFuture<V> {
 
-    boolean running = false;
+    boolean running = true;
 
     @Override
     public void run() {

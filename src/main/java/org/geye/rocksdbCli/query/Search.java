@@ -1,8 +1,8 @@
 package org.geye.rocksdbCli.query;
 
 import org.geye.rocksdbCli.bean.DocNode;
-import org.geye.rocksdbCli.bean.IndexNode;
 import org.geye.rocksdbCli.query.futures.SearchFuture;
+import org.rocksdb.RocksDBException;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -28,33 +28,56 @@ public class Search extends Query {
     }
 
     public Search doQuery() {
-        int l1LoopCnt = 0;
-        int loopStep = 2;
 
         List<String> bucketList = this.getBucketList();
 
-        for (String bucket: bucketList) {
-            l1LoopCnt++;
+        ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(0,
+                8,
+                60,
+                TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>());
 
+        for (String bucket: bucketList) {
             List<String> dbPathList = this.getDdPathList(bucket);
             if (dbPathList == null) continue;
 
             List<SearchFuture> futures = new ArrayList<>();
 
             for (String dbPath: dbPathList) {
-                SearchFuture searchFuture = new SearchFuture(dbPath, indexType, params);
+                try {
+                    SearchFuture searchFuture = new SearchFuture(dbPath, indexType, params);
+                    futures.add(searchFuture);
 
-                futures.add(searchFuture);
-                searchFuture.run();
+                    threadPoolExecutor.execute(searchFuture);
+
+                } catch (RocksDBException e) {
+                    e.printStackTrace();
+                }
             }
 
-            // 一次查询2个库
-            if (l1LoopCnt % loopStep != 0) continue;
+            while (true) {
+                boolean finish = true;
+                for (SearchFuture sf: futures) {
+                    System.out.println(sf.getDbPath() + " running state: " + !sf.isDone());
+                    finish = sf.isDone() && finish;
+                }
+
+                if (finish) break;
+
+                System.out.println("main running......");
+
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    break;
+                }
+
+            }
 
             for (SearchFuture f: futures) {
                 try {
                     List<DocNode> dataSet = f.get();
-                    if (dataSet == null) continue;
                     for (DocNode node: dataSet) {
                         treeMap.put(node.getK(), node);
                     }
@@ -63,8 +86,10 @@ public class Search extends Query {
                 }
             }
 
-            if (treeMap.size() > params.getLimit()) break;
+            if (treeMap.size() >= params.getLimit()) break;
         }
+
+        threadPoolExecutor.shutdownNow();
 
         return this;
     }
@@ -73,7 +98,7 @@ public class Search extends Query {
         for (String k: treeMap.keySet()) {
             this.res.add(treeMap.get(k));
 
-            if (this.res.size() > params.getLimit()) break;
+            if (this.res.size() >= params.getLimit()) break;
         }
         return this.res;
     }
