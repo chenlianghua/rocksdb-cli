@@ -2,3 +2,5 @@
 /target/
 
 .idea/
+
+rocksdb-cli.iml

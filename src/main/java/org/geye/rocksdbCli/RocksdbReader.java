@@ -1,13 +1,14 @@
 package org.geye.rocksdbCli;
 
 import org.apache.commons.lang.time.FastDateFormat;
+import org.geye.rocksdbCli.bean.QueryParams;
+import org.geye.rocksdbCli.query.futures.CountFuture;
+import org.geye.rocksdbCli.query.futures.SearchFuture;
 import org.rocksdb.*;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
+import java.util.concurrent.*;
 
 
 public class RocksdbReader {
@@ -20,101 +21,7 @@ public class RocksdbReader {
     private String sessionHome = String.format("%s/sessions", dbHome);
     private FastDateFormat tsFormatter = FastDateFormat.getInstance("yMMdd'h'HH");
 
-    private String formatSearchTarget(String field, String raw) {
-        String newVal = raw;
-        switch (field) {
-            case "protocol":
-                // http -> 000000http
-                // icmp -> 000000icmp
-                // dns  -> 0000000dns
-                if (raw.length() < 10) {
-                    newVal = new String(new char[10 - raw.length()]).replace('\0', '0') + raw;
-                }
-                break;
-            case "srcIp":
-            case "dstIp":
-                // 10.0.0.1 -> 010.000.000.001
-                // 192.168.10.1 -> 192.168.010.001
-                String[] subItemArr = raw.split("\\.");
-                for (int j = 0; j < subItemArr.length; j++) {
-                    String subItem = subItemArr[j];
-                    if (subItem.length() < 3) {
-                        subItemArr[j] = new String(new char[3 - subItem.length()]).replace('\0', '0') + subItem;
-                    }
-                }
-                newVal = String.join(".", subItemArr);
-                break;
-            case "srcPort":
-            case "dstPort":
-                // 8080 -> 008080
-                // 443  -> 000443
-                newVal = String.format("%06d", Integer.parseInt(raw));
-                break;
-            default:
-                break;
-        }
-
-        return newVal;
-    }
-
-    public void readSingleDb(String dbPath, String indexType, String target, long startTs, long endTs, int limit) {
-        try {
-            String cfName = String.format("flowIndexCF-%s", indexType);
-            String filter = String.format("%s%s", indexType, target);
-
-            List<ColumnFamilyDescriptor> cfDescriptors = new ArrayList<>();
-            List<ColumnFamilyHandle> cfHandles = new ArrayList<>();
-
-            ColumnFamilyDescriptor cfDescriptor = new ColumnFamilyDescriptor(cfName.getBytes(StandardCharsets.UTF_8));
-            cfDescriptors.add(cfDescriptor);
-
-            String lowerBound = String.format("%s:%s:%s", filter, startTs, "0000000000000");
-            String upperBound = String.format("%s:%s:%s", filter, endTs, System.nanoTime());
-
-            RocksDB db = RocksDB.openReadOnly(dbPath, cfDescriptors, cfHandles);
-            ReadOptions rOpts = new ReadOptions();
-
-            rOpts.setIterateLowerBound(new Slice(lowerBound.getBytes(StandardCharsets.UTF_8), filter.length()));
-            rOpts.setIterateUpperBound(new Slice(upperBound.getBytes(StandardCharsets.UTF_8), filter.length()));
-
-            RocksIterator iterator = db.newIterator();
-            iterator.seek(target.getBytes(StandardCharsets.UTF_8));
-
-            int cnt = 0;
-            for (iterator.seekToFirst(); iterator.isValid(); iterator.next()) {
-                iterator.status();
-
-                try {
-                    byte[] keyBytes = iterator.key();
-                    byte[] valueBytes = iterator.value();
-
-                    assert (iterator.key() != null);
-                    assert (iterator.value() != null);
-
-                    String key = new String(keyBytes);
-                    String value = new String(valueBytes);
-
-                    System.out.println(String.join(",", dbPath, key, value));
-                    cnt++;
-
-                    if (cnt >= limit) {
-                        break;
-                    }
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        } catch (RocksDBException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void doSearch(long startTs, long endTs, String indexType, String target, int limit) {
-        target = formatSearchTarget(indexType, target);
-        System.out.println(target);
-
-//        String startBucket = tsFormatter.format(startTs);
-//        String endBucket = tsFormatter.format(endTs);
+    public void doSearch(String action, long startTs, long endTs, String indexType, String target, int limit) {
 
         List<String> bucketList = new ArrayList<>();
 
@@ -123,20 +30,51 @@ public class RocksdbReader {
             String bucket = tsFormatter.format(tmpTs);
             bucketList.add(bucket);
 
-            System.out.println(tmpTs);
-
             tmpTs += 3600 * 1000;
         }
 
-        System.out.println(String.join(",", bucketList));
+        QueryParams queryParams = new QueryParams();
+        queryParams.setTarget(target);
+        queryParams.setStartTs(startTs);
+        queryParams.setEndTs(endTs);
+        queryParams.setLimit(limit);
 
         for (String bucket: bucketList) {
+            double sum = 0;
             String bucketPath = this.indexHome + "/" + bucket;
             File bucketDir = new File(bucketPath);
+
+            if (!bucketDir.exists()) continue;
+
+            ThreadPoolExecutor tPool = new ThreadPoolExecutor(0, 8, 60L, TimeUnit.SECONDS,
+                    new LinkedBlockingQueue<Runnable>());
+
+            List<Future<?>> res = new ArrayList<>();
+
             for (String subBucket: Objects.requireNonNull(bucketDir.list())) {
                 String dbPath = bucketPath + "/" + subBucket;
-                readSingleDb(dbPath, indexType, target, startTs, endTs, limit);
+                Future<?> f;
+                switch (action) {
+                    case "count":
+                        f = tPool.submit(new CountFuture(dbPath, queryParams));
+                        break;
+                    case "search":
+                    default:
+                        f = tPool.submit(new SearchFuture(dbPath, indexType, queryParams));
+                        break;
+                }
+                res.add(f);
             }
+
+            for (Future<?> f: res) {
+                try {
+                    f.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    e.printStackTrace();
+                }
+            }
+
+            if (action.equals("count")) System.out.println(bucketPath + ": " + sum);
         }
     }
 }
