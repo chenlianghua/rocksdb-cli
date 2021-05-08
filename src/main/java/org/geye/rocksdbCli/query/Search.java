@@ -38,7 +38,7 @@ public class Search extends Query {
                 new LinkedBlockingQueue<>());
 
         for (String bucket: bucketList) {
-            List<String> dbPathList = this.getDdPathList(bucket);
+            List<String> dbPathList = this.getIndexDdPathList(bucket);
             if (dbPathList == null) continue;
 
             List<SearchFuture> futures = new ArrayList<>();
@@ -46,33 +46,12 @@ public class Search extends Query {
             for (String dbPath: dbPathList) {
                 try {
                     SearchFuture searchFuture = new SearchFuture(dbPath, indexType, params);
+                    threadPoolExecutor.submit(new Thread(searchFuture));
+
                     futures.add(searchFuture);
-
-                    threadPoolExecutor.execute(searchFuture);
-
                 } catch (RocksDBException e) {
                     e.printStackTrace();
                 }
-            }
-
-            while (true) {
-                boolean finish = true;
-                for (SearchFuture sf: futures) {
-                    System.out.println(sf.getDbPath() + " running state: " + !sf.isDone());
-                    finish = sf.isDone() && finish;
-                }
-
-                if (finish) break;
-
-                System.out.println("main running......");
-
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                    break;
-                }
-
             }
 
             for (SearchFuture f: futures) {
@@ -83,6 +62,7 @@ public class Search extends Query {
                     }
                 } catch (InterruptedException | ExecutionException e) {
                     e.printStackTrace();
+                    System.exit(0);
                 }
             }
 

@@ -1,14 +1,12 @@
 package org.geye.rocksdbCli.query.futures;
 
 import org.geye.rocksdbCli.bean.DocNode;
-import org.geye.rocksdbCli.bean.IndexNode;
 import org.geye.rocksdbCli.bean.QueryParams;
 import org.geye.rocksdbCli.bean.RocksdbWithCF;
 import org.rocksdb.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -55,7 +53,7 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
 
             long t2 = System.currentTimeMillis();
 
-            System.out.println("(" + this.dbPath + ")采用multiGet方式取值: " + (float) (t2 - t1) / 1000);
+            System.out.println("(" + Thread.currentThread().getName() + ")采用multiGet方式取值: " + (float) (t2 - t1) / 1000);
 
         } catch (RocksDBException e) {
             e.printStackTrace();
@@ -146,6 +144,9 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
 
     @Override
     public List<DocNode> get() throws InterruptedException, ExecutionException {
+        while (this.running) {
+            Thread.sleep(50);
+        }
         return this.data;
     }
 

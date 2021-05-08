@@ -8,17 +8,13 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.Future;
+
 public abstract class Query {
 
     static {
         RocksDB.loadLibrary();
     }
     protected final QueryParams params = new QueryParams();
-
-    protected boolean finish = false;
-
-    protected List<Future> res = new ArrayList();
 
     protected String dbHome = "/data0/rocksdb";
     protected String indexHome = String.format("%s/index", dbHome);
@@ -76,7 +72,7 @@ public abstract class Query {
         return bucketList;
     }
 
-    protected List<String> getDdPathList(String bucket) {
+    protected List<String> getIndexDdPathList(String bucket) {
         List<String> dbPathList = new ArrayList<>();
 
         String bucketPath = this.indexHome + "/" + bucket;
