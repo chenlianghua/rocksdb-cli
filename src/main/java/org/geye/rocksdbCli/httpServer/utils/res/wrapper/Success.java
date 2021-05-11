@@ -4,15 +4,21 @@ import com.alibaba.fastjson.JSONObject;
 
 public class Success {
 
-    JSONObject res = new JSONObject();
+    public String msg;
+    public Object data;
 
     public Success(String msg, Object data) {
-        res.put("msg", msg);
-        res.put("data", data);
+        this.msg = msg;
+        this.data = data;
     }
 
     @Override
     public String toString() {
-        return this.res.toString();
+        JSONObject res = new JSONObject();
+
+        res.put("msg", this.msg);
+        res.put("data", this.data);
+
+        return res.toString();
     }
 }

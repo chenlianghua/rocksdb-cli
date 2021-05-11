@@ -23,7 +23,7 @@ public class utils {
 
         todayStart.add(Calendar.DATE, daysNum);
 
-        return sdf.format(todayStart);
+        return sdf.format(todayStart.getTime());
     }
 
     public static long dateTimeStr2Ts(String dateTimeStr) {

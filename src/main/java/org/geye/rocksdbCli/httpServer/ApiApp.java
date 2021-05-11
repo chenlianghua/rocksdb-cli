@@ -9,7 +9,11 @@ import org.springframework.boot.web.servlet.support.SpringBootServletInitializer
 public class ApiApp extends SpringBootServletInitializer {
 
     public static void main(String[] args) {
-        SpringApplication.run(ApiApp.class, args);
+        try {
+            SpringApplication.run(ApiApp.class, args);
+        } catch (Throwable e) {
+            e.printStackTrace();
+        }
     }
 
     @Override

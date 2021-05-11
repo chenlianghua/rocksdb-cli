@@ -7,14 +7,13 @@ import org.geye.rocksdbCli.httpServer.controller.dto.SearchDTO;
 import org.geye.rocksdbCli.httpServer.utils.res.wrapper.Success;
 import org.geye.rocksdbCli.httpServer.utils.utils;
 import org.geye.rocksdbCli.query.Search;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 
 @Api(tags = "查询接口")
-@Controller
+@RestController
 @RequestMapping(value = "_search")
 public class SearchController {
 
@@ -30,8 +29,10 @@ public class SearchController {
         long endTs = utils.dateTimeStr2Ts(searchDTO.getEndTime());
         int limit = searchDTO.getLimit();
 
-        String indexType = expression.split("=")[0];
-        String target = expression.split("=")[1];
+        String[] expressionArr = expression.split("==");
+
+        String indexType = expressionArr[0].trim();
+        String target = expressionArr[1].trim();
 
         Search search = new Search(startTs, endTs, indexType, target, limit);
         List<DocNode> result = search.doQuery().result();

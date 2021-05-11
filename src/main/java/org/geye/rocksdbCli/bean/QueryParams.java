@@ -39,4 +39,14 @@ public class QueryParams {
     public void setLimit(int limit) {
         this.limit = limit;
     }
+
+    @Override
+    public String toString() {
+        return "QueryParams{" +
+                "target='" + target + '\'' +
+                ", startTs=" + startTs +
+                ", endTs=" + endTs +
+                ", limit=" + limit +
+                '}';
+    }
 }

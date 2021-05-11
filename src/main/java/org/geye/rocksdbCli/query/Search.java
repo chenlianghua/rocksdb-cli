@@ -29,6 +29,8 @@ public class Search extends Query {
 
     public Search doQuery() {
 
+        System.out.println(params.toString());
+
         List<String> bucketList = this.getBucketList();
 
         ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(0,
@@ -58,7 +60,7 @@ public class Search extends Query {
                 try {
                     List<DocNode> dataSet = f.get();
                     for (DocNode node: dataSet) {
-                        treeMap.put(node.getK(), node);
+                        treeMap.put(node.k, node);
                     }
                 } catch (InterruptedException | ExecutionException e) {
                     e.printStackTrace();
