@@ -3,11 +3,10 @@ package org.geye.rocksdbCli.httpServer.cache;
 import org.geye.rocksdbCli.bean.RocksdbWithCF;
 import org.rocksdb.*;
 
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static org.geye.rocksdbCli.httpServer.utils.utils.buildKey;
 
 public class LRUCache{
 
@@ -19,9 +18,11 @@ public class LRUCache{
 
     private final String DEFAULT_CF = new String(RocksDB.DEFAULT_COLUMN_FAMILY);
 
-    private ConcurrentHashMap<String, CacheNode> rocksdbMap = new ConcurrentHashMap<>();
+    public ConcurrentHashMap<String, CacheNode> rocksdbMap = new ConcurrentHashMap<>();
 
-    private final ReentrantLock lock = new ReentrantLock();
+    private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock.ReadLock readLock = rwLock.readLock();
+    private final ReentrantReadWriteLock.WriteLock writeLock = rwLock.writeLock();
 
     private void initCache() {
         headNode = new CacheNode();
@@ -71,95 +72,59 @@ public class LRUCache{
         addToHead(cacheNode);
     }
 
-    public String buildKey(String dbPath, String indexType) {
-        return String.format("%s:%s", dbPath, indexType);
-    }
-
-    public RocksdbWithCF getDb(String dbPath, String indexType) throws RocksDBException {
-        List<ColumnFamilyDescriptor> cfDescriptors = new ArrayList<>();
-        List<ColumnFamilyHandle> cfHandles = new ArrayList<>();
-
-        ColumnFamilyDescriptor defaultCfDescriptor = new ColumnFamilyDescriptor(RocksDB.DEFAULT_COLUMN_FAMILY);
-        cfDescriptors.add(defaultCfDescriptor);
-
-        if (!indexType.equals(new String(RocksDB.DEFAULT_COLUMN_FAMILY))) {
-            String cfName = String.format("flowIndexCF-%s", indexType);
-            ColumnFamilyDescriptor cfDescriptor = new ColumnFamilyDescriptor(cfName.getBytes(StandardCharsets.UTF_8));
-            cfDescriptors.add(cfDescriptor);
-        }
-
-        RocksDB db = RocksDB.openReadOnly(dbPath, cfDescriptors, cfHandles);
-
-        return new RocksdbWithCF(db, cfHandles.get(cfHandles.size() - 1));
-    }
-
-    public RocksdbWithCF getDefaultDb(String dbPath) throws RocksDBException {
-        Options options = new Options();
-        options.setCreateIfMissing(true);
-
-        RocksDB rocksDB = RocksDB.openReadOnly(options, dbPath);
-
-        return new RocksdbWithCF(rocksDB, rocksDB.getDefaultColumnFamily());
-    }
-
     public RocksdbWithCF get(String dbPath) {
         return this.get(dbPath, this.DEFAULT_CF);
     }
 
     public RocksdbWithCF get(String dbPath, String indexType) {
-        this.lock.lock();
-        String key = this.buildKey(dbPath, indexType);
+        String key = buildKey(dbPath, indexType);
 
         CacheNode cacheNode;
         RocksdbWithCF obj = null;
 
+        this.readLock.lock();
         if (rocksdbMap.get(key) != null) {
+            System.out.println("cache find rocksdb handler: " + rocksdbMap.get(key).val.db.getName());
+
             cacheNode = rocksdbMap.get(key);
             moveToHead(cacheNode);
             obj = cacheNode.val;
         }
+        this.readLock.unlock();
 
-        this.lock.unlock();
         return obj;
     }
 
-    public void put(String dbPath) {
-        this.put(dbPath, this.DEFAULT_CF);
-    }
+    public void put(String dbPath, String indexType, RocksdbWithCF obj) {
+        this.writeLock.lock();
+        String key = buildKey(dbPath, indexType);
 
-    public void put(String dbPath, String indexType) {
-        this.lock.lock();
-        RocksdbWithCF rocksdb = this.get(dbPath, indexType);
-        String key = this.buildKey(dbPath, indexType);
-
-        if (rocksdb != null) {
-            CacheNode existingNode = this.rocksdbMap.get(key);
+        CacheNode existingNode = this.rocksdbMap.get(key);
+        if (existingNode != null) {
 
             this.removeNode(existingNode);
         }
+        CacheNode cacheNode = new CacheNode(key, obj);
 
-        try {
-            rocksdb = indexType.equals(DEFAULT_CF) ? this.getDefaultDb(dbPath) : this.getDb(dbPath, indexType);
-            CacheNode cacheNode = new CacheNode(key, rocksdb);
-
-            addToHead(cacheNode);
-            this.rocksdbMap.put(key, cacheNode);
-        } catch (RocksDBException e) {
-            e.printStackTrace();
-        }
+        addToHead(cacheNode);
+        this.rocksdbMap.put(key, cacheNode);
 
         while (size > MAX_SIZE) {
             CacheNode lastNode = this.removeLast();
             this.rocksdbMap.remove(lastNode.key);
         }
 
-        this.lock.unlock();
+        this.writeLock.unlock();
+    }
+
+    public void put(String dbPath, RocksdbWithCF obj) {
+        this.put(dbPath, this.DEFAULT_CF, obj);
     }
 
     public void remove(String dbPath, String indexType) {
-        String key = this.buildKey(dbPath, indexType);
+        String key = buildKey(dbPath, indexType);
 
-        this.lock.lock();
+        this.writeLock.lock();
 
         if (this.rocksdbMap.containsKey(key)) {
             CacheNode nodeToRemove = this.rocksdbMap.get(key);
@@ -167,17 +132,21 @@ public class LRUCache{
             this.rocksdbMap.remove(key);
         }
 
-        this.lock.unlock();
+        this.writeLock.unlock();
+    }
+
+    public void remove(String dbPath) {
+        this.remove(dbPath, this.DEFAULT_CF);
     }
 
     public void cleanAllCache() {
-        this.lock.lock();
+        this.writeLock.lock();
 
         this.rocksdbMap = new ConcurrentHashMap<>();
         this.initCache();
         size = 0;
 
-        this.lock.unlock();
+        this.writeLock.unlock();
     }
 }
 
@@ -194,5 +163,9 @@ class CacheNode{
     public CacheNode(String key, RocksdbWithCF val) {
         this.key = key;
         this.val = val;
+    }
+
+    public void close() {
+        if (this.val != null) this.val.close();
     }
 }

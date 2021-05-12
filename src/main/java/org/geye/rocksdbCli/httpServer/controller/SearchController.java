@@ -35,9 +35,12 @@ public class SearchController {
         String target = expressionArr[1].trim();
 
         Search search = new Search(startTs, endTs, indexType, target, limit);
-        List<DocNode> result = search.doQuery().result();
 
-        return new Success("查询成功", result);
+        long t1 = System.currentTimeMillis();
+        List<DocNode> result = search.doQuery().result();
+        long t2 = System.currentTimeMillis();
+
+        return new Success("查询成功，耗时: " + (float) (t2 - t1) / 1000 + "秒", result);
     }
 
 }

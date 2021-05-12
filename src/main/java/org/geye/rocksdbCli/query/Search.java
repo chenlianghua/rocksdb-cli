@@ -34,11 +34,12 @@ public class Search extends Query {
         List<String> bucketList = this.getBucketList();
 
         ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(0,
-                8,
+                10,
                 60,
                 TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>());
 
+        long t1 = System.currentTimeMillis();
         for (String bucket: bucketList) {
             List<String> dbPathList = this.getIndexDdPathList(bucket);
             if (dbPathList == null) continue;
@@ -70,6 +71,8 @@ public class Search extends Query {
 
             if (treeMap.size() >= params.getLimit()) break;
         }
+        long t2 = System.currentTimeMillis();
+        System.out.println("获取结果总共耗时（秒）: " + (float) (t2 - t1) / 1000);
 
         threadPoolExecutor.shutdownNow();
 

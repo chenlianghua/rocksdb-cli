@@ -1,6 +1,9 @@
 package org.geye.rocksdbCli.query.futures;
 
 import org.geye.rocksdbCli.bean.RocksdbWithCF;
+import org.geye.rocksdbCli.httpServer.cache.LRUCache;
+import org.geye.rocksdbCli.httpServer.service.IndexCacheInitService;
+import org.geye.rocksdbCli.httpServer.service.SessionDbCacheInitService;
 import org.rocksdb.*;
 
 import java.nio.charset.StandardCharsets;
@@ -10,6 +13,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
 
 public abstract class QueryFuture<V> implements RunnableFuture<V> {
 
@@ -62,6 +66,14 @@ public abstract class QueryFuture<V> implements RunnableFuture<V> {
     }
 
     public RocksdbWithCF getDb(String dbPath, String indexType) throws RocksDBException {
+
+        LRUCache cache = IndexCacheInitService.getCache();
+
+        RocksdbWithCF rocksdbWithCF = cache.get(dbPath, indexType);
+        if (rocksdbWithCF != null) {
+            return rocksdbWithCF;
+        }
+
         List<ColumnFamilyDescriptor> cfDescriptors = new ArrayList<>();
         List<ColumnFamilyHandle> cfHandles = new ArrayList<>();
 
@@ -75,16 +87,31 @@ public abstract class QueryFuture<V> implements RunnableFuture<V> {
         }
 
         RocksDB db = RocksDB.openReadOnly(dbPath, cfDescriptors, cfHandles);
+        rocksdbWithCF = new RocksdbWithCF(db, cfHandles.get(cfHandles.size() - 1));
 
-        return new RocksdbWithCF(db, cfHandles.get(cfHandles.size() - 1));
+        cache.put(dbPath, indexType, rocksdbWithCF);
+
+        return rocksdbWithCF;
     }
 
     public RocksdbWithCF getDefaultDb(String dbPath) throws RocksDBException {
+        RocksdbWithCF rocksdbWithCF;
+        LRUCache cache = SessionDbCacheInitService.getCache();
+
+        rocksdbWithCF = cache.get(dbPath);
+
+        if (rocksdbWithCF != null) {
+            return rocksdbWithCF;
+        }
+
         Options options = new Options();
         options.setCreateIfMissing(true);
 
         RocksDB rocksDB = RocksDB.openReadOnly(options, dbPath);
 
-        return new RocksdbWithCF(rocksDB, rocksDB.getDefaultColumnFamily());
+        rocksdbWithCF = new RocksdbWithCF(rocksDB, rocksDB.getDefaultColumnFamily());
+        cache.put(dbPath, rocksdbWithCF);
+
+        return rocksdbWithCF;
     }
 }

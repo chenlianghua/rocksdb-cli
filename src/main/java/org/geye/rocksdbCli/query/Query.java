@@ -2,6 +2,7 @@ package org.geye.rocksdbCli.query;
 
 import org.apache.commons.lang.time.FastDateFormat;
 import org.geye.rocksdbCli.bean.QueryParams;
+import org.geye.rocksdbCli.httpServer.utils.Configs;
 import org.rocksdb.RocksDB;
 
 import java.io.File;
@@ -9,17 +10,20 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-public abstract class Query {
+import static org.geye.rocksdbCli.httpServer.utils.utils.getBucket;
+
+public class Query {
 
     static {
         RocksDB.loadLibrary();
     }
-    protected final QueryParams params = new QueryParams();
+    protected QueryParams params = new QueryParams();
 
-    protected String dbHome = "/data0/rocksdb";
-    protected String indexHome = String.format("%s/index", dbHome);
-    protected String sessionHome = String.format("%s/sessions", dbHome);
-    protected FastDateFormat tsFormatter = FastDateFormat.getInstance("yMMdd'h'HH");
+    public Query() {};
+
+    public Query(QueryParams params) {
+        this.setParams(params);
+    }
 
     protected String formatSearchTarget(String indexType, String raw) {
         String newVal = raw;
@@ -58,11 +62,11 @@ public abstract class Query {
         return newVal;
     }
 
-    protected List<String> getBucketList() {
+    public List<String> getBucketList() {
         List<String> bucketList = new ArrayList<>();
         long tmpTs = params.getStartTs();
         while (tmpTs <= params.getEndTs()) {
-            String bucket = tsFormatter.format(tmpTs);
+            String bucket = getBucket(tmpTs);
 
             bucketList.add(bucket);
 
@@ -72,10 +76,16 @@ public abstract class Query {
         return bucketList;
     }
 
-    protected List<String> getIndexDdPathList(String bucket) {
+    private List<String> getDbPathList(String bucket, String type) {
         List<String> dbPathList = new ArrayList<>();
+        String bucketPath = "";
 
-        String bucketPath = this.indexHome + "/" + bucket;
+        if (type.equals("index")) {
+            bucketPath = Configs.INDEX_HOME + "/" + bucket;
+        } else {
+            bucketPath = Configs.SESSIONS_HOME + "/" + bucket;
+        }
+
         File bucketDir = new File(bucketPath);
 
         if (bucketDir.exists()) {
@@ -89,4 +99,15 @@ public abstract class Query {
         return dbPathList.size() > 0 ? dbPathList : null;
     }
 
+    public List<String> getIndexDdPathList(String bucket) {
+        return this.getDbPathList(bucket, "index");
+    }
+
+    public List<String> getSessionDbPathList(String bucket) {
+        return this.getDbPathList(bucket, "sessions");
+    }
+
+    public void setParams(QueryParams params) {
+        this.params = params;
+    }
 }

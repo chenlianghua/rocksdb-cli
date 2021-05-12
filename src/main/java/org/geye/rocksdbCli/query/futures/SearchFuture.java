@@ -1,5 +1,7 @@
 package org.geye.rocksdbCli.query.futures;
 
+import com.alibaba.fastjson.JSONArray;
+import com.alibaba.fastjson.JSONObject;
 import org.geye.rocksdbCli.bean.DocNode;
 import org.geye.rocksdbCli.bean.QueryParams;
 import org.geye.rocksdbCli.bean.RocksdbWithCF;
@@ -7,6 +9,7 @@ import org.rocksdb.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -19,6 +22,8 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
     private final String dbPath;
     private String indexType = new String(RocksDB.DEFAULT_COLUMN_FAMILY);
     private final QueryParams params;
+    private final String[] indexBodyFields = {"firstPacket", "lastPacket", "srcIp", "dstIp", "protocol", "srcPort", "dstPort", "srcMac", "dstMac"};
+
 
     public SearchFuture(String dbPath, String indexType, QueryParams params) throws RocksDBException {
         this.dbPath = dbPath;
@@ -28,6 +33,7 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
 
     public List<DocNode> readSessionDb(List<byte[]> ids) {
         List<DocNode> sessions = new ArrayList<>();
+        long t1 = System.currentTimeMillis();
 
         try {
             String sessionDbPath = this.dbPath.replace("index", "sessions");
@@ -35,7 +41,6 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
             // TODO: 这一步最消耗时间，最好的办法是第一次把所有的库都加载到缓存里面
             RocksdbWithCF sessionDb  = this.getDefaultDb(sessionDbPath);
 
-            long t1 = System.currentTimeMillis();
 
             List<byte[]> sessionList = sessionDb.db.multiGetAsList(ids);
 
@@ -62,9 +67,30 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
         return sessions;
     }
 
+    public JSONObject indexBodyToJSON(String raw) {
+        JSONObject jsonObject = new JSONObject();
+
+        String[] values = raw.split(",");
+
+        for (int i=0; i<indexBodyFields.length; i++) {
+            String field = indexBodyFields[i];
+
+            if (field.equals("protocol") || field.equals("srcMac") || field.equals("dstMac")) {
+                String[] rowSubVal = values[i].split("\\^");
+                JSONArray jsonArray = new JSONArray();
+                jsonArray.addAll(Arrays.asList(rowSubVal));
+
+                jsonObject.put(field, jsonArray);
+            } else {
+                jsonObject.put(field, values[i]);
+            }
+        }
+
+        return jsonObject;
+    }
+
     public void readSingleDb(String dbPath, String indexType, String target, long startTs, long endTs, int limit) {
         try {
-            List<byte[]> idList = new ArrayList<>();
             String prefixFilter = String.format("%s%s", indexType, target);
 
             RocksdbWithCF rocksObj = getDb(dbPath, indexType);
@@ -82,12 +108,10 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
                     byte[] valBytes = iterator.value();
 
                     String key = new String(keyBytes);
-                    // String value = new String(valBytes);
+                    String value = new String(valBytes);
 
-                    // IndexNode indexNode = new IndexNode(key, value, this.dbPath.replace("index", "sessions"));
-                    // this.data.add(indexNode);
-
-                    idList.add(valBytes);
+                    DocNode docNode = new DocNode(key, this.indexBodyToJSON(value).toString());
+                    this.data.add(docNode);
 
                     cnt++;
 
@@ -99,14 +123,7 @@ public class SearchFuture extends QueryFuture<List<DocNode>> {
                 }
             }
 
-            System.out.println(Thread.currentThread().getName() + ": data size: " + idList.size());
-
-            if (idList.size() > 0) {
-                this.data = this.readSessionDb(idList);
-            }
-
             iterator.close();
-            rocksObj.close();
         } catch (RocksDBException e) {
             e.printStackTrace();
         }
