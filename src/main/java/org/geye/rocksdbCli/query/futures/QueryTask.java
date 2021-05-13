@@ -9,44 +9,35 @@ import org.rocksdb.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.RunnableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 
 
-public abstract class QueryFuture<V> implements RunnableFuture<V> {
+public class QueryTask<V> implements Callable<V> {
 
     boolean running = true;
+    boolean isCancelled = false;
 
-    @Override
     public void run() {
+        if (this.isCancelled) return;
 
+        this.running = true;
     }
 
-    @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
-        return false;
+        this.running = false;
+        this.isCancelled = true;
+
+        System.out.println("query future canceled......");
+
+        return true;
     }
 
-    @Override
     public boolean isCancelled() {
-        return false;
+        return this.isCancelled;
     }
 
-    @Override
     public boolean isDone() {
         return !this.running;
-    }
-
-    @Override
-    public V get() throws InterruptedException, ExecutionException {
-        return null;
-    }
-
-    @Override
-    public V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
-        return null;
     }
 
     public RocksIterator getIterator(RocksdbWithCF rocksdb) {
@@ -113,5 +104,10 @@ public abstract class QueryFuture<V> implements RunnableFuture<V> {
         cache.put(dbPath, rocksdbWithCF);
 
         return rocksdbWithCF;
+    }
+
+    @Override
+    public V call() {
+        return null;
     }
 }

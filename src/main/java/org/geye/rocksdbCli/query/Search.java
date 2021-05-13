@@ -1,7 +1,7 @@
 package org.geye.rocksdbCli.query;
 
 import org.geye.rocksdbCli.bean.DocNode;
-import org.geye.rocksdbCli.query.futures.SearchFuture;
+import org.geye.rocksdbCli.query.futures.SearchTask;
 import org.rocksdb.RocksDBException;
 
 import java.util.*;
@@ -44,20 +44,20 @@ public class Search extends Query {
             List<String> dbPathList = this.getIndexDdPathList(bucket);
             if (dbPathList == null) continue;
 
-            List<SearchFuture> futures = new ArrayList<>();
-
+            List<FutureTask<List<DocNode>>> futureTaskList = new ArrayList<>();
             for (String dbPath: dbPathList) {
                 try {
-                    SearchFuture searchFuture = new SearchFuture(dbPath, indexType, params);
-                    threadPoolExecutor.submit(new Thread(searchFuture));
+                    SearchTask searchTask = new SearchTask(dbPath, indexType, params);
+                    FutureTask<List<DocNode>> futureTask = new FutureTask<>(searchTask);
+                    futureTask.run();
 
-                    futures.add(searchFuture);
+                    futureTaskList.add(futureTask);
                 } catch (RocksDBException e) {
                     e.printStackTrace();
                 }
             }
 
-            for (SearchFuture f: futures) {
+            for (FutureTask<List<DocNode>> f: futureTaskList) {
                 try {
                     List<DocNode> dataSet = f.get();
                     for (DocNode node: dataSet) {
@@ -71,10 +71,9 @@ public class Search extends Query {
 
             if (treeMap.size() >= params.getLimit()) break;
         }
+
         long t2 = System.currentTimeMillis();
         System.out.println("获取结果总共耗时（秒）: " + (float) (t2 - t1) / 1000);
-
-        threadPoolExecutor.shutdownNow();
 
         return this;
     }

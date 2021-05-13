@@ -8,7 +8,7 @@ import org.rocksdb.RocksIterator;
 
 import java.util.concurrent.ExecutionException;
 
-public class CountFuture extends QueryFuture<Double>{
+public class CountFuture extends QueryTask<Double>{
 
     double cnt = 0;
 
@@ -54,8 +54,4 @@ public class CountFuture extends QueryFuture<Double>{
         return sum;
     }
 
-    @Override
-    public Double get() throws InterruptedException, ExecutionException {
-        return this.cnt;
-    }
 }
