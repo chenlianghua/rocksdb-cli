@@ -1,19 +1,39 @@
 package org.geye.rocksdbCli.bean;
 
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
 
 public class QueryParams {
 
-    private String target;
     private long startTs;
     private long endTs;
     private int limit;
 
-    public String getTarget() {
-        return target;
+    private HashMap<String, String[]> filters = new HashMap<>();
+
+    public QueryParams() {
+        long currentTs = new Date().getTime();
+
+        Calendar todayStart = Calendar.getInstance();
+        todayStart.set(Calendar.HOUR_OF_DAY, 0);
+        todayStart.set(Calendar.MINUTE, 0);
+        todayStart.set(Calendar.SECOND, 0);
+        todayStart.set(Calendar.MILLISECOND, 0);
+
+        long todayStartTs = todayStart.getTime().getTime();
+
+        new QueryParams(todayStartTs, currentTs);
     }
 
-    public void setTarget(String target) {
-        this.target = target;
+    public QueryParams(long startTs, long endTs) {
+        new QueryParams(startTs, endTs, 10);
+    }
+
+    public QueryParams(long startTs, long endTs, int limit) {
+        this.startTs = startTs;
+        this.endTs = endTs;
+        this.limit = limit;
     }
 
     public long getStartTs() {
@@ -40,13 +60,27 @@ public class QueryParams {
         this.limit = limit;
     }
 
+    public HashMap<String, String[]> getFilters() {
+        return filters;
+    }
+
+    public void setFilters(HashMap<String, String[]> filters) {
+        this.filters = filters;
+    }
+
+    public void set(String field, String value) {
+        if (value == null || value.equals("")) return;
+
+        this.filters.put(field, value.split(","));
+    }
+
     @Override
     public String toString() {
         return "QueryParams{" +
-                "target='" + target + '\'' +
-                ", startTs=" + startTs +
+                "startTs=" + startTs +
                 ", endTs=" + endTs +
                 ", limit=" + limit +
+                ", filters=" + filters.toString() +
                 '}';
     }
 }

@@ -53,7 +53,7 @@ public class SessionDbCacheInitService {
 
         int dbCnt = 0;
         for (String bucket: bucketList) {
-            if (bucket.equals(currentBucket)) continue;
+            // if (bucket.equals(currentBucket)) continue;
             List<String> dbPathList = query.getSessionDbPathList(bucket);
 
             for (String dbPath: dbPathList) {

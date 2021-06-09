@@ -1,8 +1,10 @@
 package org.geye.rocksdbCli.httpServer.controller;
 
+import com.alibaba.fastjson.JSONObject;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.geye.rocksdbCli.bean.DocNode;
+import org.geye.rocksdbCli.bean.QueryParams;
 import org.geye.rocksdbCli.httpServer.controller.dto.SearchDTO;
 import org.geye.rocksdbCli.httpServer.utils.res.wrapper.Success;
 import org.geye.rocksdbCli.httpServer.utils.utils;
@@ -23,21 +25,27 @@ public class SearchController {
             @RequestBody SearchDTO searchDTO
             )
     {
+        String srcIp = searchDTO.getSrcIp();
+        String dstIp = searchDTO.getDstIp();
+        String protocol = searchDTO.getProtocol();
+        String srcPort = searchDTO.getSrcPort();
+        String dstPort = searchDTO.getDstPort();
 
-        String expression = searchDTO.getExpression();
         long startTs = utils.dateTimeStr2Ts(searchDTO.getStartTime());
         long endTs = utils.dateTimeStr2Ts(searchDTO.getEndTime());
         int limit = searchDTO.getLimit();
 
-        String[] expressionArr = expression.split("==");
+        QueryParams queryParams = new QueryParams(startTs, endTs, limit);
+        queryParams.set("srcIp", srcIp);
+        queryParams.set("dstIp", dstIp);
+        queryParams.set("protocol", protocol);
+        queryParams.set("srcPort", srcPort);
+        queryParams.set("dstPort", dstPort);
 
-        String indexType = expressionArr[0].trim();
-        String target = expressionArr[1].trim();
-
-        Search search = new Search(startTs, endTs, indexType, target, limit);
+        Search search = new Search(queryParams);
 
         long t1 = System.currentTimeMillis();
-        List<DocNode> result = search.doQuery().result();
+        List<JSONObject> result = search.doQuery().result();
         long t2 = System.currentTimeMillis();
 
         return new Success("查询成功，耗时: " + (float) (t2 - t1) / 1000 + "秒", result);

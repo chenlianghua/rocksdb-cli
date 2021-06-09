@@ -6,9 +6,10 @@ import org.rocksdb.RocksDB;
 import org.rocksdb.RocksDBException;
 import org.rocksdb.RocksIterator;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
-public class CountFuture extends QueryTask<Double>{
+public class CountFuture extends QueryTask {
 
     double cnt = 0;
 
@@ -40,7 +41,7 @@ public class CountFuture extends QueryTask<Double>{
         double sum = 0;
 
         try {
-            RocksdbWithCF rocksObj = getDb(dbPath, indexType);
+            RocksdbWithCF rocksObj = getBitmapDb(dbPath, indexType);
             RocksIterator iterator= getIterator(rocksObj);
 
             for (iterator.seekToFirst(); iterator.isValid(); iterator.next()) {

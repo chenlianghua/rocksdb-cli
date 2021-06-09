@@ -1,6 +1,5 @@
 package org.geye.rocksdbCli.query;
 
-import org.apache.commons.lang.time.FastDateFormat;
 import org.geye.rocksdbCli.bean.QueryParams;
 import org.geye.rocksdbCli.httpServer.utils.Configs;
 import org.rocksdb.RocksDB;
@@ -51,9 +50,9 @@ public class Query {
                 break;
             case "srcPort":
             case "dstPort":
-                // 8080 -> 008080
-                // 443  -> 000443
-                newVal = String.format("%06d", Integer.parseInt(raw));
+                // 8080 -> 08080
+                // 443  -> 00443
+                newVal = String.format("%05d", Integer.parseInt(raw));
                 break;
             default:
                 break;

@@ -84,7 +84,6 @@ public class LRUCache{
 
         this.readLock.lock();
         if (rocksdbMap.get(key) != null) {
-            System.out.println("cache find rocksdb handler: " + rocksdbMap.get(key).val.db.getName());
 
             cacheNode = rocksdbMap.get(key);
             moveToHead(cacheNode);

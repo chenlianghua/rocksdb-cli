@@ -7,6 +7,11 @@ public class Success {
     public String msg;
     public Object data;
 
+    public Success(String msg) {
+        this.msg = msg;
+        this.data = null;
+    }
+
     public Success(String msg, Object data) {
         this.msg = msg;
         this.data = data;
@@ -17,7 +22,8 @@ public class Success {
         JSONObject res = new JSONObject();
 
         res.put("msg", this.msg);
-        res.put("data", this.data);
+
+        if (this.data != null) res.put("data", this.data);
 
         return res.toString();
     }

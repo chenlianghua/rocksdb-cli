@@ -1,5 +1,6 @@
 package org.geye.rocksdbCli;
 
+import com.alibaba.fastjson.JSONObject;
 import org.apache.commons.cli.*;
 import org.geye.rocksdbCli.bean.DocNode;
 import org.geye.rocksdbCli.bean.IndexNode;
@@ -62,9 +63,9 @@ public class main {
                 break;
             case "search":
             default:
-                Search search = new Search(startTs, endTs, indexType, target, limit);
-                List<DocNode> result = search.doQuery().result();
-                for (DocNode node: result) {
+                Search search = new Search(startTs, endTs);
+                List<JSONObject> result = search.doQuery().result();
+                for (JSONObject node: result) {
                     System.out.println(node.toString());
                 }
                 break;
