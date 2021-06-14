@@ -45,9 +45,6 @@ public class Search extends Query {
                 continue;
             }
 
-            List<String> dbPathList = this.getIndexDdPathList(bucket);
-            if (dbPathList == null) continue;
-
             SearchSubSessionTask searchTask = new SearchSubSessionTask(bucket, params);
             Future<List<JSONObject>> future = executorService.submit(searchTask);
 

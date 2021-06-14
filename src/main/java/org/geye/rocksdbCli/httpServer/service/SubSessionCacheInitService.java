@@ -1,7 +1,9 @@
 package org.geye.rocksdbCli.httpServer.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import org.geye.rocksdbCli.bean.RocksdbWithCF;
-import org.geye.rocksdbCli.httpServer.cache.LRUCache;
 import org.geye.rocksdbCli.httpServer.utils.Configs;
 import org.geye.rocksdbCli.httpServer.utils.utils;
 import org.geye.rocksdbCli.query.Query;
@@ -16,20 +18,27 @@ import java.io.File;
 import java.util.*;
 
 @Component
-public class IndexCacheInitService {
+public class SubSessionCacheInitService {
 
-    protected static int CACHE_SIZE = 3 * 24 * 10;
-    protected volatile static LRUCache indexCache;
+    protected static int CACHE_SIZE = 7 * 24 * 10 * 5;
+    protected volatile static Cache<String, RocksdbWithCF> indexCache;
 
-    private IndexCacheInitService() {};
+    private SubSessionCacheInitService() {};
 
     @PostConstruct
-    public static LRUCache getCache() {
+    public static Cache<String, RocksdbWithCF> getCache() {
 
         if (indexCache == null) {
-            synchronized (IndexCacheInitService.class) {
+            synchronized (SubSessionCacheInitService.class) {
                 if (indexCache == null) {
-                    indexCache = new LRUCache(CACHE_SIZE);
+                    indexCache = Caffeine.newBuilder()
+                            .maximumSize(CACHE_SIZE)
+                            .initialCapacity(CACHE_SIZE)
+                            .removalListener(
+                                    (String key, Object value, RemovalCause cause) -> {
+                                        System.out.println(String.format("sub session cache key: %s was removed (%s)%n", key, cause));
+                                    })
+                            .build();;
                     initCache();
                 }
             }
@@ -76,16 +85,15 @@ public class IndexCacheInitService {
 
                 if (dbCnt >= CACHE_SIZE) return;
 
-                for (String indexType: Configs.ALL_INDEX_TYPE) {
-                    try {
+                try {
 
-                        RocksdbWithCF rocksdbWithCF = getDb(dbPath);
-                        indexCache.put(dbPath, indexType, rocksdbWithCF);
+                    RocksdbWithCF rocksdbWithCF = getDb(dbPath);
+                    String cacheKey = utils.buildKey(dbPath, new String(RocksDB.DEFAULT_COLUMN_FAMILY));
+                    indexCache.put(cacheKey, rocksdbWithCF);
 
-                        dbCnt++;
-                    } catch (RocksDBException e) {
-                        e.printStackTrace();
-                    }
+                    dbCnt++;
+                } catch (RocksDBException e) {
+                    e.printStackTrace();
                 }
             }
         }

@@ -129,6 +129,7 @@ public class BitMapTest {
     @Test
     public void roaringBitmapRangeTest() {
         RoaringBitmap roaringBitmap = new RoaringBitmap();
+        roaringBitmap.add(0);
         System.out.println(roaringBitmap.limit(10));
 
         Roaring64Bitmap bitmap = new Roaring64Bitmap();
@@ -137,6 +138,15 @@ public class BitMapTest {
             Long v = iterator.next();
             System.out.println(v);
         }
+
+        int i = 99999999 * 20;
+        RoaringBitmap idBitmap = new RoaringBitmap();
+        idBitmap.add(0, i);
+        System.out.println(idBitmap.getCardinality());
+        System.out.println(i);
+        System.out.println(String.valueOf(i).length());
+
+        System.out.println(String.format("%010d", 100000000 * 5));
     }
 
     @Test
@@ -177,4 +187,5 @@ public class BitMapTest {
         System.out.println(bitmap.contains(new IPAddressString("10.0.0.3").getAddress().getValue().longValue()));
         System.out.println(bitmap.contains(new IPAddressString("192.168.10.4").getAddress().getValue().longValue()));
     }
+
 }

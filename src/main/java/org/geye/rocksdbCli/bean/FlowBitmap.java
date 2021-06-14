@@ -1,6 +1,7 @@
 package org.geye.rocksdbCli.bean;
 
-import org.roaringbitmap.longlong.Roaring64Bitmap;
+
+import org.roaringbitmap.RoaringBitmap;
 
 import java.io.*;
 
@@ -13,7 +14,7 @@ public class FlowBitmap {
     private long maxSessionTs = 0L;
 
     public int increment = 0;
-    public Roaring64Bitmap bitmap = new Roaring64Bitmap();
+    public RoaringBitmap bitmap = new RoaringBitmap();
 
     public FlowBitmap(String flowKey) {
         this.flowKey = flowKey;
@@ -24,7 +25,7 @@ public class FlowBitmap {
         this.bitmap = byte2Bitmap(inputByte);
     }
 
-    public void add(long indexId) {
+    public void add(int indexId) {
         bitmap.add(indexId);
     }
 
@@ -32,7 +33,7 @@ public class FlowBitmap {
         return this.flowKey;
     }
 
-    public void setBitmap(Roaring64Bitmap bitmap) {
+    public void setBitmap(RoaringBitmap bitmap) {
         this.bitmap = bitmap;
     }
 
@@ -63,13 +64,13 @@ public class FlowBitmap {
      * @return bitmap
      * @throws IOException
      */
-    public Roaring64Bitmap byte2Bitmap(byte[] inputByte) throws IOException {
-        Roaring64Bitmap Roaring64Bitmap = new Roaring64Bitmap();
+    public RoaringBitmap byte2Bitmap(byte[] inputByte) throws IOException {
+        RoaringBitmap RoaringBitmap = new RoaringBitmap();
         ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(inputByte);
 
-        Roaring64Bitmap.deserialize(new DataInputStream(byteArrayInputStream));
+        RoaringBitmap.deserialize(new DataInputStream(byteArrayInputStream));
 
-        return Roaring64Bitmap;
+        return RoaringBitmap;
     }
 
     public long getMinSessionTs() {

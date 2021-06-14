@@ -1,22 +1,21 @@
 package org.geye.rocksdbCli.query.futures;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import org.geye.rocksdbCli.bean.QueryParams;
 import org.geye.rocksdbCli.bean.RocksdbWithCF;
-import org.geye.rocksdbCli.httpServer.cache.LRUCache;
 import org.geye.rocksdbCli.httpServer.service.BitmapCacheInitService;
 import org.geye.rocksdbCli.httpServer.utils.Configs;
 import org.geye.rocksdbCli.httpServer.utils.utils;
 import org.geye.rocksdbCli.query.Query;
 import org.roaringbitmap.FastAggregation;
 import org.roaringbitmap.ParallelAggregation;
-import org.roaringbitmap.longlong.Roaring64Bitmap;
+import org.roaringbitmap.RoaringBitmap;
 import org.rocksdb.*;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 public class SearchBitmapTask extends Query {
@@ -34,12 +33,12 @@ public class SearchBitmapTask extends Query {
         this.bucket = bucket;
     }
 
-    public RocksIterator getIterator(RocksdbWithCF rocksObj) {
-        return this.getIterator(rocksObj, "");
-    }
-
     public String getCfName(String indexType) {
         return String.format("%s%s", this.cfPrefix, indexType);
+    }
+
+    public RocksIterator getIterator(RocksdbWithCF rocksObj) {
+        return this.getIterator(rocksObj, "");
     }
 
     public RocksIterator getIterator(RocksdbWithCF rocksObj, String prefixFilter) {
@@ -58,9 +57,11 @@ public class SearchBitmapTask extends Query {
 
     public RocksdbWithCF getDb(String dbPath, String indexType) throws RocksDBException {
 
-        LRUCache cache = BitmapCacheInitService.getCache();
+        String cacheKey = utils.buildKey(dbPath, indexType);
+
+        Cache<String, RocksdbWithCF> cache = BitmapCacheInitService.getCache();
         RocksdbWithCF rocksdbWithCF;
-        rocksdbWithCF = cache.get(dbPath, indexType);
+        rocksdbWithCF = cache.getIfPresent(cacheKey);
         if (rocksdbWithCF != null) {
             return rocksdbWithCF;
         }
@@ -80,7 +81,7 @@ public class SearchBitmapTask extends Query {
         RocksDB db = RocksDB.openReadOnly(dbPath, cfDescriptors, cfHandles);
         rocksdbWithCF = new RocksdbWithCF(db, cfHandles.get(cfHandles.size() - 1));
 
-        cache.put(dbPath, indexType, rocksdbWithCF);
+        cache.put(cacheKey, rocksdbWithCF);
 
         return rocksdbWithCF;
     }
@@ -91,13 +92,13 @@ public class SearchBitmapTask extends Query {
      * @return          bitmap
      * @throws IOException
      */
-    public Roaring64Bitmap byte2Bitmap(byte[] inputByte) throws IOException {
-        Roaring64Bitmap Roaring64Bitmap = new Roaring64Bitmap();
+    public RoaringBitmap byte2Bitmap(byte[] inputByte) throws IOException {
+        RoaringBitmap RoaringBitmap = new RoaringBitmap();
         ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(inputByte);
 
-        Roaring64Bitmap.deserialize(new DataInputStream(byteArrayInputStream));
+        RoaringBitmap.deserialize(new DataInputStream(byteArrayInputStream));
 
-        return Roaring64Bitmap;
+        return RoaringBitmap;
     }
 
     /***
@@ -106,7 +107,7 @@ public class SearchBitmapTask extends Query {
      * @return          byte[]
      * @throws IOException
      */
-    public byte[] bitmap2byte(Roaring64Bitmap bitmap) throws IOException {
+    public byte[] bitmap2byte(RoaringBitmap bitmap) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         bitmap.serialize(dataOutputStream);
@@ -114,19 +115,24 @@ public class SearchBitmapTask extends Query {
         return outputStream.toByteArray();
     }
 
-    public Roaring64Bitmap fetchBitmap() throws ParseException {
-        Roaring64Bitmap finalBitmap = new Roaring64Bitmap();
+    public RoaringBitmap fetchBitmap() throws ParseException {
+        long t1 = System.currentTimeMillis();
 
+        RoaringBitmap finalBitmap = new RoaringBitmap();
         long minBucketTs = utils.getMinBucketTs(bucket);
         long maxBucketTs = utils.getMaxBucketTs(bucket);
 
-        long lowerBound = Math.max(0, (params.getStartTs() - minBucketTs) * 1000000);
-        long highBound = (Math.min(maxBucketTs, params.getEndTs()) - minBucketTs) * 1000000 + 999999;
+        int lowerBound = Math.max(0, (int) (params.getStartTs() - minBucketTs) * 100);
+        int highBound = ((int) (Math.min(maxBucketTs, params.getEndTs()) - minBucketTs)) * 100 + 99;
 
-        long t1 = System.currentTimeMillis();
+        finalBitmap.add(lowerBound, highBound);
+
         // 过滤的字段: 5元组
+        List<RoaringBitmap> flowBitmapList = new ArrayList<>();
         for (String indexType: params.getFilters().keySet()) {
-            Roaring64Bitmap indexBitmap = new Roaring64Bitmap();
+            // RoaringBitmap indexBitmap = new RoaringBitmap();
+            long tt1 = System.currentTimeMillis();
+
             try {
                 RocksdbWithCF rocksObj = getDb(bitmapDbPath, indexType);
 
@@ -142,26 +148,47 @@ public class SearchBitmapTask extends Query {
                 }
 
                 List<byte[]> resultBytes = rocksObj.db.multiGetAsList(cfHandlerList, filterBytes);
+                List<RoaringBitmap> tmpBitmapList = new ArrayList<>();
+
+                RoaringBitmap indexBitmap = new RoaringBitmap();
                 for (byte[] bytes: resultBytes) {
                     try {
                         if (bytes != null) {
-                            Roaring64Bitmap tmpBitmap = byte2Bitmap(bytes);
+                            RoaringBitmap tmpBitmap = byte2Bitmap(bytes);
 
-                            indexBitmap.or(tmpBitmap);
+                            // indexBitmap.or(tmpBitmap);
+
+                            tmpBitmapList.add(tmpBitmap);
                         }
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
                 }
-
-                if (finalBitmap.isEmpty()) {
-                    finalBitmap = indexBitmap;
-                } else {
-                    finalBitmap.and(indexBitmap);
+                if (tmpBitmapList.size() > 0) {
+                    RoaringBitmap[] tmpBitmapArr = tmpBitmapList.toArray(new RoaringBitmap[tmpBitmapList.size()]);
+                    indexBitmap = ParallelAggregation.or(tmpBitmapArr);
                 }
+                flowBitmapList.add(indexBitmap);
+
+                // if (finalBitmap.isEmpty()) {
+                //     finalBitmap = indexBitmap;
+                // } else {
+                //     finalBitmap.and(indexBitmap);
+                // }
+
             } catch (RocksDBException e) {
                 e.printStackTrace();
             }
+            long tt2 = System.currentTimeMillis();
+
+            System.out.println(bitmapDbPath + " flow bitmap merge cost: " + (float) (tt2 - tt1) / 1000);
+        }
+
+        if (flowBitmapList.size() > 0) {
+            RoaringBitmap[] flowBitmapArr = flowBitmapList.toArray(new RoaringBitmap[flowBitmapList.size()]);
+            RoaringBitmap tmpFinalBitmap = FastAggregation.and(flowBitmapArr);
+
+            finalBitmap.and(tmpFinalBitmap);
         }
 
         long t2 = System.currentTimeMillis();
@@ -170,5 +197,27 @@ public class SearchBitmapTask extends Query {
         return finalBitmap;
     }
 
+    public RoaringBitmap fetchBitmap(String indexType) throws RocksDBException {
+        RocksdbWithCF rocksdb = this.getDb(bitmapDbPath, indexType);
 
+        RocksIterator iterator = this.getIterator(rocksdb);
+
+        RoaringBitmap finalBitmap = new RoaringBitmap();
+        for (iterator.seekToFirst(); iterator.isValid(); iterator.next()) {
+            byte[] keyBytes = iterator.key();
+            byte[] bytes = iterator.value();
+
+            try {
+                String key = new String(keyBytes);
+                RoaringBitmap tmpBitmap = byte2Bitmap(bytes);
+
+                finalBitmap.or(tmpBitmap);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        iterator.close();
+
+        return finalBitmap;
+    }
 }

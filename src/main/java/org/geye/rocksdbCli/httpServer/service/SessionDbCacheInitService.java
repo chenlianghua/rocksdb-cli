@@ -37,7 +37,7 @@ public class SessionDbCacheInitService {
 
     public static List<String> getAllBucketList() {
 
-        File bucketDir = new File(Configs.INDEX_HOME);
+        File bucketDir = new File(Configs.SESSIONS_HOME);
         List<String> bucketList = Arrays.asList(Objects.requireNonNull(bucketDir.list()));
 
         bucketList.sort(Collections.reverseOrder());
@@ -62,8 +62,6 @@ public class SessionDbCacheInitService {
 
                 try {
                     RocksdbWithCF rocksdbWithCF = getDefaultDb(dbPath);
-
-                    System.out.println("cache db: " + dbPath);
 
                     indexCache.put(dbPath, rocksdbWithCF);
 

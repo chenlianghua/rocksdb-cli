@@ -1,5 +1,8 @@
 package org.geye.rocksdbCli.httpServer.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.RemovalCause;
 import org.geye.rocksdbCli.bean.RocksdbWithCF;
 import org.geye.rocksdbCli.httpServer.cache.LRUCache;
 import org.geye.rocksdbCli.httpServer.utils.Configs;
@@ -15,21 +18,28 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
-@Component
+// @Component
 public class BitmapCacheInitService {
 
-    protected static int CACHE_SIZE = 3 * 24 * 5;
-    protected volatile static LRUCache indexCache;
+    protected static int CACHE_SIZE = 7 * 24 * 5;
+    protected volatile static Cache<String, RocksdbWithCF> indexCache;
 
     private BitmapCacheInitService() {};
 
-    @PostConstruct
-    public static LRUCache getCache() {
+    // @PostConstruct
+    public static Cache<String, RocksdbWithCF> getCache() {
 
         if (indexCache == null) {
             synchronized (BitmapCacheInitService.class) {
                 if (indexCache == null) {
-                    indexCache = new LRUCache(CACHE_SIZE);
+                    indexCache = Caffeine.newBuilder()
+                            .maximumSize(CACHE_SIZE)
+                            .initialCapacity(CACHE_SIZE)
+                            .removalListener(
+                                    (String key, Object value, RemovalCause cause) -> {
+                                        System.out.println(String.format("bitmap index cache key: %s was removed (%s)%n", key, cause));
+                                    })
+                            .build();;
                     initCache();
                 }
             }
@@ -72,8 +82,10 @@ public class BitmapCacheInitService {
             for (String indexType: Configs.ALL_INDEX_TYPE) {
                 try {
 
+                    String cacheKey = utils.buildKey(dbPath, indexType);
+
                     RocksdbWithCF rocksdbWithCF = getDb(dbPath, indexType);
-                    indexCache.put(dbPath, indexType, rocksdbWithCF);
+                    indexCache.put(cacheKey, rocksdbWithCF);
 
                     dbCnt++;
                 } catch (RocksDBException e) {

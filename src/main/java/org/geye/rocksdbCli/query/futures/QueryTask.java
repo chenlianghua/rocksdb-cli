@@ -1,16 +1,17 @@
 package org.geye.rocksdbCli.query.futures;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import org.geye.rocksdbCli.bean.RocksdbWithCF;
 import org.geye.rocksdbCli.httpServer.cache.LRUCache;
-import org.geye.rocksdbCli.httpServer.service.IndexCacheInitService;
+import org.geye.rocksdbCli.httpServer.service.SubSessionCacheInitService;
 import org.geye.rocksdbCli.httpServer.service.SessionDbCacheInitService;
+import org.geye.rocksdbCli.httpServer.utils.utils;
 import org.geye.rocksdbCli.query.Query;
 import org.rocksdb.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.*;
 
 
 public class QueryTask extends Query {
@@ -30,9 +31,9 @@ public class QueryTask extends Query {
 
     public RocksdbWithCF getBitmapDb(String dbPath, String indexType) throws RocksDBException {
 
-        LRUCache cache = IndexCacheInitService.getCache();
-
-        RocksdbWithCF rocksdbWithCF = cache.get(dbPath, indexType);
+        Cache<String, RocksdbWithCF> cache = SubSessionCacheInitService.getCache();
+        String cacheKey = utils.buildKey(dbPath, indexType);
+        RocksdbWithCF rocksdbWithCF = cache.getIfPresent(cacheKey);
         if (rocksdbWithCF != null) {
             return rocksdbWithCF;
         }
@@ -52,16 +53,17 @@ public class QueryTask extends Query {
         RocksDB db = RocksDB.openReadOnly(dbPath, cfDescriptors, cfHandles);
         rocksdbWithCF = new RocksdbWithCF(db, cfHandles.get(cfHandles.size() - 1));
 
-        cache.put(dbPath, indexType, rocksdbWithCF);
+        cache.put(cacheKey, rocksdbWithCF);
 
         return rocksdbWithCF;
     }
 
     public RocksdbWithCF getSubSessionDb(String dbPath) throws RocksDBException {
         RocksdbWithCF rocksdbWithCF;
-        LRUCache cache = IndexCacheInitService.getCache();
+        Cache<String, RocksdbWithCF> cache = SubSessionCacheInitService.getCache();
+        String cacheKey = utils.buildKey(dbPath, new String(RocksDB.DEFAULT_COLUMN_FAMILY));
 
-        rocksdbWithCF = cache.get(dbPath);
+        rocksdbWithCF = cache.getIfPresent(cacheKey);
 
         if (rocksdbWithCF != null) {
             return rocksdbWithCF;
@@ -73,7 +75,7 @@ public class QueryTask extends Query {
         RocksDB rocksDB = RocksDB.openReadOnly(options, dbPath);
 
         rocksdbWithCF = new RocksdbWithCF(rocksDB, rocksDB.getDefaultColumnFamily());
-        cache.put(dbPath, rocksdbWithCF);
+        cache.put(cacheKey, rocksdbWithCF);
 
         return rocksdbWithCF;
     }

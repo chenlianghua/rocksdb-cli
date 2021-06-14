@@ -9,7 +9,7 @@ import org.geye.rocksdbCli.httpServer.utils.utils;
 @ApiModel(value = "基本过滤参数")
 public class BaseQueryDTO {
 
-    @ApiModelProperty(value = "expression", required = true)
+    @ApiModelProperty(value = "expression", required = false)
     String expression;
 
     @ApiModelProperty(value = "srcIp", required = false)
